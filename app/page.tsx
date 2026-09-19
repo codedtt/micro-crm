@@ -12,7 +12,6 @@ import {
 import { analyzeCustomerIntelligence } from '@/lib/ai-engine';
 import { 
   Users, 
-  AlertCircle, 
   Sparkles, 
   Phone, 
   Mail, 
@@ -23,9 +22,9 @@ import {
   Clock, 
   ChevronRight,
   Send,
-  Building2,
-  TrendingUp,
-  ArrowUpRight
+  ArrowUpRight,
+  Plus,
+  X
 } from 'lucide-react';
 
 export default function MicroCRM() {
@@ -34,11 +33,20 @@ export default function MicroCRM() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'prospect' | 'customer'>('all');
   const [copiedDraft, setCopiedDraft] = useState(false);
 
+  // Dynamic state for interactions to allow adding new entries
+  const [allInteractions, setAllInteractions] = useState<Interaction[]>(INTERACTIONS);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newType, setNewType] = useState<'email' | 'call' | 'meeting' | 'note'>('call');
+  const [newContactId, setNewContactId] = useState('');
+  const [newNotes, setNewNotes] = useState('');
+
   // Compute enriched customer dataset with AI analysis
   const enrichedCustomers = useMemo(() => {
     return CUSTOMERS.map(cust => {
       const custContacts = CONTACTS.filter(c => c.customer_id === cust.id);
-      const custInteractions = INTERACTIONS.filter(i => i.customer_id === cust.id);
+      const custInteractions = allInteractions.filter(i => i.customer_id === cust.id);
       const aiInsights = analyzeCustomerIntelligence(cust, custContacts, custInteractions);
 
       return {
@@ -48,7 +56,7 @@ export default function MicroCRM() {
         ai: aiInsights
       };
     }).sort((a, b) => b.ai.attentionScore - a.ai.attentionScore);
-  }, []);
+  }, [allInteractions]);
 
   // Filtered customer list
   const filteredCustomers = useMemo(() => {
@@ -70,6 +78,32 @@ export default function MicroCRM() {
     navigator.clipboard.writeText(activeCustomer.ai.recommendedEmailDraft);
     setCopiedDraft(true);
     setTimeout(() => setCopiedDraft(false), 2000);
+  };
+
+  const handleOpenModal = () => {
+    if (activeCustomer.contacts.length > 0) {
+      setNewContactId(activeCustomer.contacts[0].id);
+    }
+    setNewNotes('');
+    setIsModalOpen(true);
+  };
+
+  const handleAddInteraction = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNotes.trim()) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const newEntry: Interaction = {
+      id: `int_${Date.now()}`,
+      customer_id: activeCustomer.id,
+      contact_id: newContactId || activeCustomer.contacts[0]?.id || 'contact_001',
+      type: newType,
+      occurred_at: today,
+      notes: newNotes.trim()
+    };
+
+    setAllInteractions([newEntry, ...allInteractions]);
+    setIsModalOpen(false);
   };
 
   return (
@@ -109,7 +143,7 @@ export default function MicroCRM() {
                 <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input 
                   type="text"
-                  placeholder="Search practice, contact, or pain point (e.g. Dentrix)..."
+                  placeholder="Search practice, contact, or pain point..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
@@ -220,8 +254,16 @@ export default function MicroCRM() {
                   </p>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <div className="text-right mr-2">
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={handleOpenModal}
+                    className="flex items-center space-x-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3 py-2 rounded-lg shadow-sm transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Log Interaction</span>
+                  </button>
+
+                  <div className="text-right border-l border-slate-200 pl-3">
                     <div className="text-xs text-slate-400 font-medium">Attention Score</div>
                     <div className="text-lg font-black text-rose-600">{activeCustomer.ai.attentionScore} / 100</div>
                   </div>
@@ -339,6 +381,101 @@ export default function MicroCRM() {
 
         </div>
       </main>
+
+      {/* LOG INTERACTION MODAL DIALOG */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center space-x-2">
+                <div className="bg-indigo-100 text-indigo-700 p-1.5 rounded-lg">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-slate-900 text-sm">Log Interaction</h3>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddInteraction} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Practice</label>
+                <input 
+                  type="text" 
+                  disabled 
+                  value={activeCustomer.name} 
+                  className="w-full bg-slate-100 border border-slate-200 text-slate-600 text-xs rounded-lg p-2.5 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Contact</label>
+                <select 
+                  value={newContactId} 
+                  onChange={(e) => setNewContactId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  {activeCustomer.contacts.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.role})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Interaction Type</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {(['call', 'email', 'meeting', 'note'] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setNewType(t)}
+                      className={`py-2 text-xs font-semibold rounded-lg capitalize border transition-all ${
+                        newType === t 
+                          ? 'bg-indigo-50 border-indigo-600 text-indigo-700 shadow-sm' 
+                          : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Interaction Notes</label>
+                <textarea 
+                  required
+                  rows={4}
+                  placeholder="e.g. Spoke with Dr. Evans on the phone. Confirmed contract terms look good..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-lg p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                ></textarea>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all"
+                >
+                  Save Interaction
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
