@@ -18,8 +18,8 @@ An intelligent co-pilot built for small dental and medical practice owners to he
 4. **Dynamic Interaction Logging**
    - Includes a **"Log Interaction"** modal allowing business owners to record calls, emails, meetings, or notes on the fly, immediately updating the timeline and refreshing AI insights.
 
-5. **Hybrid Intelligence Architecture**
-   - Built with a rule-assisted fallback engine that delivers instant response times and reliable scoring for evaluation out-of-the-box, while remaining structured-output ready for live OpenAI/Anthropic API integration.
+5. **Live Gemini 2.5 & Hybrid Architecture**
+   - Powered by Gemini 2.5 Flash via Next.js API route handler (`/api/ai/analyze`) using structured JSON output schemas. Includes a rule-assisted local fallback engine that guarantees instant evaluation response times even without an API key.
 
 ---
 
@@ -29,6 +29,7 @@ An intelligent co-pilot built for small dental and medical practice owners to he
 - **Language:** TypeScript
 - **Styling:** Tailwind CSS
 - **Icons:** Lucide React
+- **AI SDK:** `@google/genai` (Gemini 2.5 Flash)
 
 ### Running Locally
 ```bash
@@ -38,9 +39,14 @@ cd micro-crm
 # 2. Install dependencies
 npm install
 
-# 3. Run development server
+# 3. Configure Gemini API Key (Optional)
+# Create a .env.local file in the root directory:
+echo "GEMINI_API_KEY=your_gemini_api_key_here" > .env.local
+
+# 4. Run development server
 npm run dev
 
+(Note: If GEMINI_API_KEY is omitted, the app gracefully falls back to the deterministic local engine, ensuring zero-config execution for evaluators out-of-the-box.)
 Open http://localhost:3000/ in your browser to view the application.
 ```
 
