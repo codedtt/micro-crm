@@ -7,9 +7,10 @@ import {
   INTERACTIONS, 
   Customer, 
   Contact, 
-  Interaction 
+  Interaction,
+  CustomerInsights 
 } from '@/lib/crm-data';
-import { analyzeCustomerIntelligence } from '@/lib/ai-engine';
+import { analyzeCustomerIntelligenceSync } from '@/lib/ai-engine';
 import { 
   Users, 
   Sparkles, 
@@ -24,7 +25,8 @@ import {
   Send,
   ArrowUpRight,
   Plus,
-  X
+  X,
+  Loader2
 } from 'lucide-react';
 
 export default function MicroCRM() {
@@ -33,8 +35,12 @@ export default function MicroCRM() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'prospect' | 'customer'>('all');
   const [copiedDraft, setCopiedDraft] = useState(false);
 
-  // Dynamic state for interactions to allow adding new entries
+  // Dynamic state for interactions
   const [allInteractions, setAllInteractions] = useState<Interaction[]>(INTERACTIONS);
+
+  // State to store live Gemini API overrides by customer ID
+  const [liveAiInsights, setLiveAiInsights] = useState<Record<string, CustomerInsights>>({});
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,12 +48,14 @@ export default function MicroCRM() {
   const [newContactId, setNewContactId] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
-  // Compute enriched customer dataset with AI analysis
+  // Compute enriched customer dataset (prefers live Gemini insights if available)
   const enrichedCustomers = useMemo(() => {
     return CUSTOMERS.map(cust => {
       const custContacts = CONTACTS.filter(c => c.customer_id === cust.id);
       const custInteractions = allInteractions.filter(i => i.customer_id === cust.id);
-      const aiInsights = analyzeCustomerIntelligence(cust, custContacts, custInteractions);
+      
+      // Use live Gemini insight if generated, otherwise fall back to local heuristic calculation
+      const aiInsights = liveAiInsights[cust.id] || analyzeCustomerIntelligenceSync(cust, custContacts, custInteractions);
 
       return {
         ...cust,
@@ -56,7 +64,7 @@ export default function MicroCRM() {
         ai: aiInsights
       };
     }).sort((a, b) => b.ai.attentionScore - a.ai.attentionScore);
-  }, [allInteractions]);
+  }, [allInteractions, liveAiInsights]);
 
   // Filtered customer list
   const filteredCustomers = useMemo(() => {
@@ -88,7 +96,8 @@ export default function MicroCRM() {
     setIsModalOpen(true);
   };
 
-  const handleAddInteraction = (e: React.FormEvent) => {
+  // Submit handler: Adds interaction to timeline AND updates UI state with live Gemini response
+  const handleAddInteraction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newNotes.trim()) return;
 
@@ -102,8 +111,39 @@ export default function MicroCRM() {
       notes: newNotes.trim()
     };
 
-    setAllInteractions([newEntry, ...allInteractions]);
+    const updatedInteractions = [newEntry, ...allInteractions];
+    setAllInteractions(updatedInteractions);
     setIsModalOpen(false);
+    setIsAnalyzing(true);
+
+    // Call live Next.js API Route Handler connected to Gemini 2.5
+    try {
+      const payload = {
+        customer: activeCustomer,
+        contacts: activeCustomer.contacts,
+        interactions: updatedInteractions.filter(i => i.customer_id === activeCustomer.id)
+      };
+
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const aiResult: CustomerInsights = await res.json();
+        
+        // Save the Gemini output into state to trigger an immediate live re-render
+        setLiveAiInsights(prev => ({
+          ...prev,
+          [activeCustomer.id]: aiResult
+        }));
+      }
+    } catch (err) {
+      console.error('Gemini API analysis error:', err);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   return (
@@ -124,7 +164,7 @@ export default function MicroCRM() {
           <div className="flex items-center space-x-4">
             <div className="hidden sm:flex items-center text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-full font-medium border border-indigo-100">
               <span className="w-2 h-2 rounded-full bg-indigo-600 animate-pulse mr-2"></span>
-              AI Attention Engine Active
+              {isAnalyzing ? 'Gemini 2.5 Analyzing...' : 'AI Attention Engine Active'}
             </div>
           </div>
         </div>
@@ -287,9 +327,16 @@ export default function MicroCRM() {
             <div className="bg-gradient-to-br from-indigo-900 via-indigo-950 to-slate-900 text-white p-6 rounded-xl shadow-lg relative overflow-hidden space-y-4">
               <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-              <div className="flex items-center space-x-2 text-indigo-300 font-semibold text-xs uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                <span>AI Relationship Summary</span>
+              <div className="flex items-center justify-between text-indigo-300 font-semibold text-xs uppercase tracking-wider">
+                <div className="flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  <span>AI Relationship Summary</span>
+                </div>
+                {isAnalyzing && (
+                  <span className="flex items-center text-indigo-300 text-xs normal-case lowercase">
+                    <Loader2 className="w-3 h-3 animate-spin mr-1" /> Generating Gemini Insights...
+                  </span>
+                )}
               </div>
 
               <p className="text-sm text-indigo-100 leading-relaxed">
